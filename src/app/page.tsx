@@ -1,0 +1,343 @@
+'use client';
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Search,
+  RefreshCw,
+  Clock,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  Zap,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
+import dynamic from 'next/dynamic';
+import SignalCard from '@/components/signal-card';
+import IndicatorPanel from '@/components/indicator-panel';
+import type { FullAnalysis } from '@/lib/signals';
+
+// Dynamic import for chart (no SSR)
+const CandlestickChart = dynamic(() => import('@/components/candlestick-chart'), {
+  ssr: false,
+  loading: () => (
+    <Skeleton className="w-full h-[500px] rounded-xl bg-zinc-900" />
+  ),
+});
+
+interface MarketData {
+  symbol: string;
+  candles: {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+  }[];
+  analysis: FullAnalysis;
+  fetchedAt: string;
+}
+
+const POPULAR_COINS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT'];
+
+export default function Home() {
+  const [symbol, setSymbol] = useState('BTCUSDT');
+  const [inputValue, setInputValue] = useState('BTCUSDT');
+  const [data, setData] = useState<MarketData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(300);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showChartLegend, setShowChartLegend] = useState(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchData = useCallback(async (sym: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/market?symbol=${encodeURIComponent(sym)}&interval=5m&limit=200`);
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || 'Failed to fetch data');
+        setData(null);
+      } else {
+        setData(json);
+      }
+    } catch {
+      setError('Network error. Please check your connection and try again.');
+      setData(null);
+    } finally {
+      setLoading(false);
+      setCountdown(300);
+    }
+  }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchData(symbol);
+  }, [symbol, fetchData]);
+
+  // Auto-refresh countdown
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          fetchData(symbol);
+          return 300;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [symbol, fetchData]);
+
+  const handleSearch = () => {
+    const cleaned = inputValue.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (cleaned) {
+      setSymbol(cleaned);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSearch();
+  };
+
+  const handleCoinClick = (coin: string) => {
+    setInputValue(coin);
+    setSymbol(coin);
+    setShowSuggestions(false);
+  };
+
+  const formatCountdown = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const priceChange = data?.analysis.priceChange24h;
+  const isPositive = priceChange !== null && priceChange !== undefined && priceChange >= 0;
+
+  return (
+    <div className="min-h-screen bg-[#050505] text-zinc-100">
+      {/* Header */}
+      <header className="border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-400" />
+              <h1 className="text-lg font-bold tracking-tight">
+                <span className="text-amber-400">Guru</span>
+                <span className="text-zinc-400">Signals</span>
+              </h1>
+            </div>
+            <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium uppercase tracking-wider">
+              5m Futures
+            </span>
+          </div>
+
+          {/* Search */}
+          <div className="relative flex-1 max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <Input
+                value={inputValue}
+                onChange={(e) => {
+                  setInputValue(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onKeyDown={handleKeyDown}
+                onFocus={() => setShowSuggestions(true)}
+                placeholder="Search coin pair (e.g. BTCUSDT)"
+                className="pl-10 pr-10 h-9 bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 text-sm rounded-lg focus-visible:ring-amber-500/30 focus-visible:border-amber-500/30"
+              />
+              <Button
+                onClick={handleSearch}
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 px-3 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs rounded-md"
+              >
+                Go
+              </Button>
+            </div>
+
+            {/* Suggestions */}
+            {showSuggestions && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl z-50 overflow-hidden">
+                {POPULAR_COINS.filter((c) =>
+                  c.includes(inputValue.toUpperCase())
+                ).map((coin) => (
+                  <button
+                    key={coin}
+                    onClick={() => handleCoinClick(coin)}
+                    className="w-full px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2"
+                  >
+                    <Activity className="w-3 h-3 text-zinc-600" />
+                    {coin}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Refresh + Timer */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <Clock className="w-3.5 h-3.5" />
+              <span className="font-mono">{formatCountdown(countdown)}</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => fetchData(symbol)}
+              disabled={loading}
+              className="h-8 w-8 p-0 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            {error}
+          </div>
+        )}
+
+        {loading && !data && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-6">
+              <Skeleton className="h-10 w-40 bg-zinc-900 rounded-lg" />
+              <Skeleton className="h-6 w-24 bg-zinc-900 rounded" />
+            </div>
+            <Skeleton className="w-full h-[500px] rounded-xl bg-zinc-900" />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Skeleton className="h-60 bg-zinc-900 rounded-xl" />
+              <Skeleton className="h-60 bg-zinc-900 rounded-xl" />
+              <Skeleton className="h-60 bg-zinc-900 rounded-xl" />
+            </div>
+          </div>
+        )}
+
+        {data && (
+          <>
+            {/* Price Header */}
+            <div className="mb-6 flex flex-wrap items-end gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-2xl font-bold">{data.symbol}</h2>
+                  <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-medium">5m</span>
+                  <span className="text-xs text-zinc-600">Perpetual Futures</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl font-mono font-bold">
+                    ${data.analysis.currentPrice.toLocaleString()}
+                  </span>
+                  {priceChange !== null && priceChange !== undefined && (
+                    <span
+                      className={`flex items-center gap-0.5 text-sm font-semibold px-2 py-0.5 rounded ${
+                        isPositive
+                          ? 'text-emerald-400 bg-emerald-500/10'
+                          : 'text-red-400 bg-red-500/10'
+                      }`}
+                    >
+                      {isPositive ? (
+                        <TrendingUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <TrendingDown className="w-3.5 h-3.5" />
+                      )}
+                      {isPositive ? '+' : ''}{priceChange.toFixed(2)}%
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Legend toggle */}
+              <button
+                onClick={() => setShowChartLegend(!showChartLegend)}
+                className="ml-auto flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Chart Legend
+                {showChartLegend ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+            </div>
+
+            {/* Chart Legend */}
+            {showChartLegend && (
+              <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-zinc-500">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-amber-400 rounded" />
+                  <span>EMA 9</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-cyan-400 rounded" />
+                  <span>EMA 21</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-purple-400/60 rounded border-dashed border border-purple-400/40" style={{ borderTop: '1px dashed rgba(168,85,247,0.6)' }} />
+                  <span>Bollinger Bands</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-2 bg-emerald-500/60 rounded-sm" />
+                  <span>Buy Volume</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-2 bg-red-500/60 rounded-sm" />
+                  <span>Sell Volume</span>
+                </div>
+              </div>
+            )}
+
+            {/* Chart */}
+            <div className="mb-6">
+              <CandlestickChart candles={data.candles} />
+            </div>
+
+            {/* Signal + Indicators Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Signal Card - takes 2 cols */}
+              <div className="lg:col-span-2">
+                <SignalCard signal={data.analysis.signal} />
+              </div>
+
+              {/* Indicator Panel */}
+              <div>
+                <IndicatorPanel analysis={data.analysis} />
+              </div>
+            </div>
+
+            {/* Footer info */}
+            <div className="mt-8 text-center text-[11px] text-zinc-700 pb-4">
+              <p>Signals are generated using a hybrid technical analysis engine (RSI, MACD, Bollinger Bands, EMA, Volume, Momentum).</p>
+              <p className="mt-1">This is not financial advice. Always do your own research before trading.</p>
+              <p className="mt-1">Data from Binance · Auto-refreshes every 5 minutes</p>
+            </div>
+          </>
+        )}
+
+        {/* Empty state */}
+        {!data && !loading && !error && (
+          <div className="flex flex-col items-center justify-center py-32 text-center">
+            <Zap className="w-12 h-12 text-zinc-800 mb-4" />
+            <h3 className="text-lg font-semibold text-zinc-400 mb-2">Search for a Coin</h3>
+            <p className="text-sm text-zinc-600 max-w-sm">
+              Enter a trading pair like <span className="text-zinc-400 font-mono">BTCUSDT</span> or{' '}
+              <span className="text-zinc-400 font-mono">ETHUSDT</span> to see live signals and analysis.
+            </p>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
