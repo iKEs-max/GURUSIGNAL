@@ -58,6 +58,7 @@ const SEARCH_COINS = [
   { symbol: 'BNBUSDT',  name: 'BNB' },
   { symbol: 'DOGEUSDT', name: 'Dogecoin' },
   { symbol: 'AVAXUSDT', name: 'Avalanche' },
+  { symbol: 'SLXUSDT', name: 'SLX' },
 ];
 
 const WATCHLIST = [
@@ -71,6 +72,7 @@ const WATCHLIST = [
   { symbol: 'XVGUSDT',  name: 'Verge',          ticker: 'XVG' },
   { symbol: 'IOTAUSDT', name: 'IOTA',           ticker: 'IOTA' },
   { symbol: 'SXTUSDT',  name: 'Space & Time',   ticker: 'SXT' },
+  { symbol: 'SLXUSDT',  name: 'SLX',             ticker: 'SLX' },
 ];
 
 export default function Home() {
