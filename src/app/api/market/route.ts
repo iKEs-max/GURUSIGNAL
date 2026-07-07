@@ -24,8 +24,8 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get('limit') || '200', 10);
 
   try {
-    // Fetch kline data from Binance public API
-    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+    // Fetch kline data from Binance FUTURES API (fapi) for perpetual futures
+    const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
     const response = await fetch(url, {
       cache: 'no-store',
       signal: AbortSignal.timeout(15000),
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         );
       }
-      throw new Error(`Binance API error: ${response.status} ${errorBody}`);
+      throw new Error(`Binance Futures API error: ${response.status} ${errorBody}`);
     }
 
     const klines: BinanceKline[] = await response.json();
