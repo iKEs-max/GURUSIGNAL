@@ -14,6 +14,7 @@ export interface Signal {
   takeProfit: number;
   entryPrice: number;
   reasoning: string[];
+  upProbability: number;  // 0-100, probability price goes UP next candle
 }
 
 export interface IndicatorScores {
@@ -243,6 +244,7 @@ export function generateSignals(candles: Candle[]): FullAnalysis | null {
       takeProfit,
       entryPrice: parseFloat(currentPrice.toFixed(precision)),
       reasoning,
+      upProbability: parseFloat(Math.max(5, Math.min(95, 50 + compositeScore / 2)).toFixed(0)),
     },
     indicators: {
       rsi: parseFloat(rsiScore.toFixed(1)),

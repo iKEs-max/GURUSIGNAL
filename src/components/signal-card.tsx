@@ -87,6 +87,33 @@ export default function SignalCard({ signal }: SignalCardProps) {
             <span className="text-[10px] text-zinc-600">Strong Sell</span>
             <span className="text-[10px] text-zinc-600">Strong Buy</span>
           </div>
+
+          {/* Next 5m Prediction Meter */}
+          <div className="mt-5 pt-4 border-t border-zinc-700/50">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Next 5m Prediction</p>
+              <p className="text-xs text-zinc-600">based on 6 indicators</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-sm font-bold w-8 text-right ${signal.upProbability >= 50 ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                {signal.upProbability}%
+              </span>
+              <div className="flex-1 relative h-3 rounded-full overflow-hidden bg-zinc-800">
+                <div
+                  className="absolute top-0 left-0 h-full rounded-full transition-all duration-700 ease-out bg-gradient-to-r from-emerald-500 to-emerald-400"
+                  style={{ width: `${signal.upProbability}%` }}
+                />
+                <div className="absolute top-0 left-1/2 w-px h-full bg-zinc-500/50" />
+              </div>
+              <span className={`text-sm font-bold w-8 ${signal.upProbability < 50 ? 'text-red-400' : 'text-zinc-500'}`}>
+                {100 - signal.upProbability}%
+              </span>
+            </div>
+            <div className="flex justify-between mt-1.5">
+              <span className="text-[11px] font-semibold text-emerald-400/80">UP</span>
+              <span className="text-[11px] font-semibold text-red-400/80">DOWN</span>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
