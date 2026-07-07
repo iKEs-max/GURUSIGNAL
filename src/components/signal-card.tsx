@@ -1,8 +1,11 @@
 'use client';
 
 import { SignalType, Signal } from '@/lib/signals';
-import { TrendingUp, TrendingDown, Minus, AlertTriangle, Target, Shield } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, AlertTriangle, Target, Shield, Scale } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import Sparkline from '@/components/sparkline';
+import { getScoreHistory, ScoreSnapshot } from '@/lib/signal-history';
+import { useState, useEffect } from 'react';
 
 const signalConfig: Record<SignalType, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
   STRONG_BUY: {
@@ -44,10 +47,23 @@ const signalConfig: Record<SignalType, { label: string; color: string; bg: strin
 
 interface SignalCardProps {
   signal: Signal;
+  symbol: string;
+  interval: string;
 }
 
-export default function SignalCard({ signal }: SignalCardProps) {
+export default function SignalCard({ signal, symbol, interval }: SignalCardProps) {
   const config = signalConfig[signal.type];
+  const [scoreHistory, setScoreHistory] = useState<number[]>([]);
+
+  useEffect(() => {
+    const snapshots = getScoreHistory(symbol, interval);
+    setScoreHistory(snapshots.map((s: ScoreSnapshot) => s.score).slice(-20));
+  }, [symbol, interval]);
+
+  // Risk/Reward ratio
+  const risk = Math.abs(signal.stopLoss - signal.entryPrice);
+  const reward = Math.abs(signal.takeProfit - signal.entryPrice);
+  const rrRatio = risk > 0 ? (reward / risk) : 0;
 
   return (
     <div className="space-y-4">
@@ -88,10 +104,10 @@ export default function SignalCard({ signal }: SignalCardProps) {
             <span className="text-[10px] text-zinc-600">Strong Buy</span>
           </div>
 
-          {/* Next 5m Prediction Meter */}
+          {/* Next Candle Prediction Meter */}
           <div className="mt-5 pt-4 border-t border-zinc-700/50">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Next 5m Prediction</p>
+              <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Next Candle Prediction</p>
               <p className="text-xs text-zinc-600">based on 6 indicators</p>
             </div>
             <div className="flex items-center gap-3">
@@ -113,6 +129,18 @@ export default function SignalCard({ signal }: SignalCardProps) {
               <span className="text-[11px] font-semibold text-emerald-400/80">UP</span>
               <span className="text-[11px] font-semibold text-red-400/80">DOWN</span>
             </div>
+          </div>
+
+          {/* Sparkline + R:R Row */}
+          <div className="mt-4 pt-4 border-t border-zinc-700/50">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Signal Strength Trend</p>
+              <div className="flex items-center gap-1.5">
+                <Scale className="w-3.5 h-3.5 text-zinc-500" />
+                <span className="text-xs font-bold text-zinc-300">R:R <span className={rrRatio >= 1.5 ? 'text-emerald-400' : rrRatio >= 1 ? 'text-amber-400' : 'text-red-400'}>{rrRatio.toFixed(2)}</span></span>
+              </div>
+            </div>
+            <Sparkline data={scoreHistory} width={300} height={36} />
           </div>
         </CardContent>
       </Card>

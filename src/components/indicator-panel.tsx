@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 
 interface IndicatorPanelProps {
   analysis: FullAnalysis;
+  fundingRate?: number | null;
 }
 
 function ScoreBar({ label, score, value }: { label: string; score: number; value?: string | number | null }) {
@@ -38,7 +39,7 @@ function ScoreBar({ label, score, value }: { label: string; score: number; value
   );
 }
 
-export default function IndicatorPanel({ analysis }: IndicatorPanelProps) {
+export default function IndicatorPanel({ analysis, fundingRate }: IndicatorPanelProps) {
   const { indicators } = analysis;
 
   return (
@@ -103,6 +104,19 @@ export default function IndicatorPanel({ analysis }: IndicatorPanelProps) {
               {analysis.volumeAvg !== null ? analysis.volumeAvg.toLocaleString() : '—'}
             </p>
           </div>
+          {fundingRate !== undefined && fundingRate !== null && (
+            <div className="col-span-2 pt-2 border-t border-zinc-800/30">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-zinc-600 uppercase tracking-wider">Funding Rate</p>
+                <span className={`text-sm font-mono font-medium ${fundingRate >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {(fundingRate * 100).toFixed(4)}%
+                  <span className="text-[10px] text-zinc-600 ml-1.5">
+                    {fundingRate >= 0 ? 'longs pay' : 'shorts pay'}
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

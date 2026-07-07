@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Search,
@@ -15,10 +14,14 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
+  Bell,
+  BellOff,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import SignalCard from '@/components/signal-card';
 import IndicatorPanel from '@/components/indicator-panel';
+import SignalHistory from '@/components/signal-history';
+import { addHistoryEntry, addScoreSnapshot } from '@/lib/signal-history';
 import type { FullAnalysis } from '@/lib/signals';
 
 // Dynamic import for chart (no SSR)
@@ -31,6 +34,7 @@ const CandlestickChart = dynamic(() => import('@/components/candlestick-chart'),
 
 interface MarketData {
   symbol: string;
+  interval: string;
   candles: {
     time: number;
     open: number;
@@ -40,6 +44,7 @@ interface MarketData {
     volume: number;
   }[];
   analysis: FullAnalysis;
+  fundingRate?: number | null;
   fetchedAt: string;
 }
 
@@ -53,12 +58,12 @@ const SEARCH_COINS = [
   { symbol: 'XLMUSDT',  name: 'Stellar Lumens' },
   { symbol: 'HBARUSDT', name: 'Hedera Hashgraph' },
   { symbol: 'XVGUSDT',  name: 'Verge' },
-  { symbol: 'IOTAUSDT', name: 'IOTA' },
+  { symbol: 'IOTAUSDT',  name: 'IOTA' },
   { symbol: 'SXTUSDT',  name: 'Space & Time' },
   { symbol: 'BNBUSDT',  name: 'BNB' },
   { symbol: 'DOGEUSDT', name: 'Dogecoin' },
   { symbol: 'AVAXUSDT', name: 'Avalanche' },
-  { symbol: 'SLXUSDT', name: 'SLX' },
+  { symbol: 'SLXUSDT',  name: 'SLX' },
 ];
 
 const WATCHLIST = [
@@ -75,42 +80,109 @@ const WATCHLIST = [
   { symbol: 'SLXUSDT',  name: 'SLX',             ticker: 'SLX' },
 ];
 
+const INTERVALS = [
+  { value: '1m',  label: '1m',  countdown: 60 },
+  { value: '5m',  label: '5m',  countdown: 300 },
+  { value: '15m', label: '15m', countdown: 900 },
+] as const;
+
+const BULLISH_SIGNALS = ['STRONG_BUY', 'BUY'];
+const BEARISH_SIGNALS = ['STRONG_SELL', 'SELL'];
+
 export default function Home() {
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [inputValue, setInputValue] = useState('BTCUSDT');
   const [data, setData] = useState<MarketData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [interval, setInterval_] = useState('5m');
   const [countdown, setCountdown] = useState(300);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showChartLegend, setShowChartLegend] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const prevSignalRef = useRef<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchData = useCallback(async (sym: string) => {
+  // Get countdown for current interval
+  const currentIntervalConfig = INTERVALS.find((i) => i.value === interval) || INTERVALS[1];
+
+  const fetchData = useCallback(async (sym: string, intv: string) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/market?symbol=${encodeURIComponent(sym)}&interval=5m&limit=200`);
+      const res = await fetch(`/api/market?symbol=${encodeURIComponent(sym)}&interval=${intv}&limit=200`);
       const json = await res.json();
       if (!res.ok) {
         setError(json.error || 'Failed to fetch data');
         setData(null);
       } else {
         setData(json);
+
+        // Log to signal history
+        if (json.analysis?.signal) {
+          const sig = json.analysis.signal;
+          addHistoryEntry({
+            symbol: sym,
+            interval: intv,
+            signalType: sig.type,
+            score: sig.score,
+            confidence: sig.confidence,
+            upProbability: sig.upProbability,
+            entryPrice: sig.entryPrice,
+            stopLoss: sig.stopLoss,
+            takeProfit: sig.takeProfit,
+          });
+
+          // Log score for sparkline
+          addScoreSnapshot({ symbol: sym, interval: intv, score: sig.score });
+
+          // Check for signal flip and notify
+          const prevType = prevSignalRef.current;
+          if (prevType && prevType !== sig.type) {
+            const prevBull = BULLISH_SIGNALS.includes(prevType);
+            const currBull = BULLISH_SIGNALS.includes(sig.type);
+            const prevBear = BEARISH_SIGNALS.includes(prevType);
+            const currBear = BEARISH_SIGNALS.includes(sig.type);
+
+            // Significant flip: bullish→bearish or bearish→bullish or any→strong
+            const isSignificantFlip =
+              (prevBull && currBear) ||
+              (prevBear && currBull) ||
+              sig.type === 'STRONG_BUY' ||
+              sig.type === 'STRONG_SELL';
+
+            if (isSignificantFlip && notificationsEnabled && 'Notification' in window) {
+              const coinName = sym.replace('USDT', '');
+              const notification = new Notification(`GuruSignals — ${coinName}`, {
+                body: `Signal flipped to ${sig.type.replace('_', ' ')} (${sig.score >= 0 ? '+' : ''}${sig.score}) | Up: ${sig.upProbability}%`,
+                icon: '/favicon.ico',
+                tag: `gurusignal-${sym}-${intv}`,
+              });
+              notification.onclick = () => {
+                window.focus();
+                notification.close();
+              };
+            }
+          }
+          prevSignalRef.current = sig.type;
+          setHistoryRefreshKey((k) => k + 1);
+        }
       }
     } catch {
       setError('Network error. Please check your connection and try again.');
       setData(null);
     } finally {
       setLoading(false);
-      setCountdown(300);
+      setCountdown(currentIntervalConfig.countdown);
     }
-  }, []);
+  }, [currentIntervalConfig.countdown, notificationsEnabled]);
 
   // Initial fetch
   useEffect(() => {
-    fetchData(symbol);
-  }, [symbol, fetchData]);
+    prevSignalRef.current = null;
+    fetchData(symbol, interval);
+  }, [symbol, interval, fetchData]);
 
   // Auto-refresh countdown
   useEffect(() => {
@@ -118,8 +190,8 @@ export default function Home() {
     intervalRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
-          fetchData(symbol);
-          return 300;
+          fetchData(symbol, interval);
+          return currentIntervalConfig.countdown;
         }
         return prev - 1;
       });
@@ -128,7 +200,14 @@ export default function Home() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [symbol, fetchData]);
+  }, [symbol, interval, fetchData, currentIntervalConfig.countdown]);
+
+  // Request notification permission
+  const requestNotifications = async () => {
+    if (!('Notification' in window)) return;
+    const permission = await Notification.requestPermission();
+    setNotificationsEnabled(permission === 'granted');
+  };
 
   const handleSearch = () => {
     const cleaned = inputValue.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -146,6 +225,10 @@ export default function Home() {
     setInputValue(coin);
     setSymbol(coin);
     setShowSuggestions(false);
+  };
+
+  const handleIntervalChange = (intv: string) => {
+    setInterval_(intv);
   };
 
   const formatCountdown = (seconds: number) => {
@@ -171,7 +254,7 @@ export default function Home() {
               </h1>
             </div>
             <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium uppercase tracking-wider">
-              5m Futures
+              Futures
             </span>
           </div>
 
@@ -230,8 +313,25 @@ export default function Home() {
             )}
           </div>
 
-          {/* Refresh + Timer */}
-          <div className="flex items-center gap-3">
+          {/* Interval Selector + Refresh + Timer + Notifications */}
+          <div className="flex items-center gap-2">
+            {/* Interval buttons */}
+            <div className="hidden sm:flex items-center bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+              {INTERVALS.map((intv) => (
+                <button
+                  key={intv.value}
+                  onClick={() => handleIntervalChange(intv.value)}
+                  className={`px-2.5 py-1.5 text-xs font-medium transition-all ${
+                    interval === intv.value
+                      ? 'bg-amber-500/15 text-amber-400'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {intv.label}
+                </button>
+              ))}
+            </div>
+
             <div className="flex items-center gap-1.5 text-xs text-zinc-500">
               <Clock className="w-3.5 h-3.5" />
               <span className="font-mono">{formatCountdown(countdown)}</span>
@@ -239,12 +339,23 @@ export default function Home() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => fetchData(symbol)}
+              onClick={() => fetchData(symbol, interval)}
               disabled={loading}
               className="h-8 w-8 p-0 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
+            <button
+              onClick={requestNotifications}
+              className={`h-8 w-8 flex items-center justify-center rounded-md transition-colors ${
+                notificationsEnabled
+                  ? 'text-amber-400 hover:bg-zinc-800'
+                  : 'text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800'
+              }`}
+              title={notificationsEnabled ? 'Notifications on' : 'Click to enable alerts'}
+            >
+              {notificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+            </button>
           </div>
         </div>
       </header>
@@ -273,6 +384,22 @@ export default function Home() {
                 </button>
               );
             })}
+            {/* Mobile interval selector */}
+            <div className="sm:hidden flex items-center gap-1 ml-auto shrink-0">
+              {INTERVALS.map((intv) => (
+                <button
+                  key={intv.value}
+                  onClick={() => handleIntervalChange(intv.value)}
+                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all border ${
+                    interval === intv.value
+                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                      : 'bg-zinc-900/60 border-zinc-800/50 text-zinc-500'
+                  }`}
+                >
+                  {intv.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -307,7 +434,7 @@ export default function Home() {
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <h2 className="text-2xl font-bold">{data.symbol}</h2>
-                  <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-medium">5m</span>
+                  <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-medium">{interval}</span>
                   <span className="text-xs text-zinc-600">Perpetual Futures</span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -378,20 +505,25 @@ export default function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Signal Card - takes 2 cols */}
               <div className="lg:col-span-2">
-                <SignalCard signal={data.analysis.signal} />
+                <SignalCard signal={data.analysis.signal} symbol={symbol} interval={interval} />
               </div>
 
               {/* Indicator Panel */}
               <div>
-                <IndicatorPanel analysis={data.analysis} />
+                <IndicatorPanel analysis={data.analysis} fundingRate={data.fundingRate} />
               </div>
+            </div>
+
+            {/* Signal History */}
+            <div className="mt-6">
+              <SignalHistory refreshKey={historyRefreshKey} />
             </div>
 
             {/* Footer info */}
             <div className="mt-8 text-center text-[11px] text-zinc-700 pb-4">
               <p>Signals are generated using a hybrid technical analysis engine (RSI, MACD, Bollinger Bands, EMA, Volume, Momentum).</p>
               <p className="mt-1">This is not financial advice. Always do your own research before trading.</p>
-              <p className="mt-1">Data from Binance · Auto-refreshes every 5 minutes</p>
+              <p className="mt-1">Data from Binance · Auto-refreshes every {interval}</p>
             </div>
           </>
         )}

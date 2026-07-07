@@ -17,11 +17,20 @@ interface BinanceKline {
   11: string; // Ignore
 }
 
+const VALID_INTERVALS = ['1m', '5m', '15m'];
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = (searchParams.get('symbol') || 'BTCUSDT').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const interval = searchParams.get('interval') || '5m';
   const limit = parseInt(searchParams.get('limit') || '200', 10);
+
+  if (!VALID_INTERVALS.includes(interval)) {
+    return NextResponse.json(
+      { error: `Invalid interval. Use: ${VALID_INTERVALS.join(', ')}` },
+      { status: 400 }
+    );
+  }
 
   try {
     // Fetch kline data from Binance FUTURES API (fapi) for perpetual futures
@@ -74,6 +83,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Fetch funding rate in parallel
+    let fundingRate: number | null = null;
+    try {
+      const fundingUrl = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`;
+      const fundingRes = await fetch(fundingUrl, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
+      });
+      if (fundingRes.ok) {
+        const fundingData = await fundingRes.json();
+        if (Array.isArray(fundingData) && fundingData.length > 0) {
+          fundingRate = parseFloat(fundingData[0].fundingRate);
+        }
+      }
+    } catch {
+      // Funding rate is optional — don't fail the whole request
+    }
+
     // Return chart data + analysis
     const chartCandles = candles.map((c) => ({
       time: c.time,
@@ -89,6 +116,7 @@ export async function GET(request: NextRequest) {
       interval,
       candles: chartCandles,
       analysis,
+      fundingRate,
       fetchedAt: new Date().toISOString(),
       candleCount: candles.length,
     });
