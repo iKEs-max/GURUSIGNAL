@@ -1,0 +1,101 @@
+// Client-side Binance data fetcher
+// Fetches directly from the browser to bypass server-side network restrictions
+
+interface BinanceKline {
+  0: number;  // Open time
+  1: string;  // Open
+  2: string;  // High
+  3: string;  // Low
+  4: string;  // Close
+  5: string;  // Volume
+  6: number;  // Close time
+  7: string;  // Quote asset volume
+  8: number;  // Number of trades
+  9: string;  // Taker buy base asset volume
+  10: string; // Taker buy quote asset volume
+  11: string; // Ignore
+}
+
+interface BinanceFundingRate {
+  symbol: string;
+  fundingRate: string;
+  fundingTime: number;
+}
+
+const BINANCE_FAPI_ENDPOINTS = [
+  'https://fapi.binance.com',
+  'https://fapi1.binance.com',
+  'https://fapi2.binance.com',
+  'https://fapi3.binance.com',
+];
+
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    return res;
+  } catch (err) {
+    clearTimeout(timeout);
+    throw err;
+  }
+}
+
+async function tryEndpoints<T>(
+  path: string,
+  parser: (res: Response) => Promise<T>,
+  timeoutMs: number
+): Promise<T> {
+  const errors: string[] = [];
+
+  for (const base of BINANCE_FAPI_ENDPOINTS) {
+    try {
+      const url = `${base}${path}`;
+      const res = await fetchWithTimeout(url, timeoutMs);
+      if (res.ok) {
+        return await parser(res);
+      }
+      errors.push(`${base}: HTTP ${res.status}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`${base}: ${msg}`);
+    }
+  }
+
+  throw new Error(errors.join(' | '));
+}
+
+export async function fetchKlines(
+  symbol: string,
+  interval: string,
+  limit: number = 200
+): Promise<BinanceKline[]> {
+  const path = `/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
+  return tryEndpoints<BinanceKline[]>(
+    path,
+    (res) => res.json(),
+    15000
+  );
+}
+
+export async function fetchFundingRate(
+  symbol: string
+): Promise<number | null> {
+  try {
+    const path = `/fapi/v1/fundingRate?symbol=${encodeURIComponent(symbol)}&limit=1`;
+    const data = await tryEndpoints<BinanceFundingRate[]>(
+      path,
+      (res) => res.json(),
+      8000
+    );
+    if (Array.isArray(data) && data.length > 0) {
+      return parseFloat(data[0].fundingRate);
+    }
+  } catch {
+    // Optional — fail silently
+  }
+  return null;
+}

@@ -24,6 +24,7 @@ import SignalCard from '@/components/signal-card';
 import IndicatorPanel from '@/components/indicator-panel';
 import SignalHistory from '@/components/signal-history';
 import { addHistoryEntry, addScoreSnapshot } from '@/lib/signal-history';
+import { fetchKlines, fetchFundingRate } from '@/lib/binance-client';
 import type { FullAnalysis } from '@/lib/signals';
 
 // Dynamic import for chart (no SSR)
@@ -131,10 +132,22 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/market?symbol=${encodeURIComponent(sym)}&interval=${intv}&limit=200`);
+      // Step 1: Fetch raw kline data directly from Binance (client-side)
+      const klines = await fetchKlines(sym, intv, 200);
+
+      // Step 2: Fetch funding rate in parallel (optional)
+      const fundingRatePromise = fetchFundingRate(sym);
+
+      // Step 3: Send raw data to our API for signal generation
+      const fundingRate = await fundingRatePromise;
+      const res = await fetch('/api/market', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ klines, symbol: sym, interval: intv, fundingRate }),
+      });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error || 'Failed to fetch data');
+        setError(json.error || 'Failed to generate signals');
         setData(null);
       } else {
         setData(json);
@@ -176,7 +189,7 @@ export default function Home() {
               const coinName = sym.replace('USDT', '');
               const notification = new Notification(`GuruSignals — ${coinName}`, {
                 body: `Signal flipped to ${sig.type.replace('_', ' ')} (${sig.score >= 0 ? '+' : ''}${sig.score}) | Up: ${sig.upProbability}%`,
-                icon: '/favicon.ico',
+                icon: '/icon-192.png',
                 tag: `gurusignal-${sym}-${intv}`,
               });
               notification.onclick = () => {
@@ -189,8 +202,9 @@ export default function Home() {
           setHistoryRefreshKey((k) => k + 1);
         }
       }
-    } catch {
-      setError('Network error. Please check your connection and try again.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Network error: ${msg}`);
       setData(null);
     } finally {
       setLoading(false);
