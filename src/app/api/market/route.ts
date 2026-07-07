@@ -24,31 +24,54 @@ const FETCH_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
 };
 
-async function fetchWithRetry(url: string, timeoutMs: number, retries = 2): Promise<Response> {
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+// Multiple Binance endpoints for fallback
+const BINANCE_ENDPOINTS = [
+  'https://fapi.binance.com',
+  'https://fapi1.binance.com',
+  'https://fapi2.binance.com',
+  'https://fapi3.binance.com',
+];
+
+async function fetchJSON(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: FETCH_HEADERS,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// Try multiple Binance endpoints with retries
+async function fetchWithFallback(path: string, timeoutMs: number): Promise<Response> {
+  const errors: string[] = [];
+
+  for (const base of BINANCE_ENDPOINTS) {
+    const url = `${base}${path}`;
+    for (let attempt = 0; attempt <= 1; attempt++) {
       try {
-        const res = await fetch(url, {
-          cache: 'no-store',
-          signal: controller.signal,
-          headers: FETCH_HEADERS,
-        });
-        return res;
-      } finally {
-        clearTimeout(timeout);
-      }
-    } catch (err) {
-      lastError = err as Error;
-      if (attempt < retries) {
-        // Wait 500ms before retry
-        await new Promise((r) => setTimeout(r, 500));
+        const res = await fetchJSON(url, timeoutMs);
+        if (res.ok || res.status === 400 || res.status === 429) {
+          return res; // Got a real Binance response (even if it's an error)
+        }
+        // Non-200 from Binance itself — try next endpoint
+        errors.push(`${base}: status ${res.status}`);
+        break;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`${base}: ${msg}`);
+        if (attempt < 1) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
       }
     }
   }
-  throw lastError || new Error('Fetch failed after retries');
+
+  throw new Error(`All endpoints failed: ${errors.join('; ')}`);
 }
 
 export async function GET(request: NextRequest) {
@@ -65,19 +88,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch kline data from Binance FUTURES API (fapi) for perpetual futures
-    const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-    const response = await fetchWithRetry(url, 15000);
+    // Fetch kline data — tries multiple Binance endpoints automatically
+    const klinePath = `/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+    const response = await fetchWithFallback(klinePath, 12000);
 
     if (!response.ok) {
       const errorBody = await response.text();
-      if (response.status === 400 || response.status === 429) {
-        return NextResponse.json(
-          { error: `Invalid symbol or rate limited: ${errorBody}` },
-          { status: 400 }
-        );
-      }
-      throw new Error(`Binance API returned ${response.status}: ${errorBody}`);
+      return NextResponse.json(
+        { error: `Binance error: ${errorBody}` },
+        { status: 400 }
+      );
     }
 
     const klines: BinanceKline[] = await response.json();
@@ -112,8 +132,8 @@ export async function GET(request: NextRequest) {
     // Fetch funding rate (optional, non-blocking)
     let fundingRate: number | null = null;
     try {
-      const fundingUrl = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`;
-      const fundingRes = await fetchWithRetry(fundingUrl, 8000, 0);
+      const fundingPath = `/fapi/v1/fundingRate?symbol=${symbol}&limit=1`;
+      const fundingRes = await fetchWithFallback(fundingPath, 6000);
       if (fundingRes.ok) {
         const fundingData = await fundingRes.json();
         if (Array.isArray(fundingData) && fundingData.length > 0) {
