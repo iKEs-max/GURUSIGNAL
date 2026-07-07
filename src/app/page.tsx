@@ -45,6 +45,19 @@ interface MarketData {
 
 const POPULAR_COINS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT'];
 
+const WATCHLIST = [
+  { symbol: 'ETHUSDT',  name: 'Ethereum',       ticker: 'ETH' },
+  { symbol: 'SOLUSDT',  name: 'Solana',         ticker: 'SOL' },
+  { symbol: 'XRPUSDT',  name: 'XRP',            ticker: 'XRP' },
+  { symbol: 'ADAUSDT',  name: 'Cardano',        ticker: 'ADA' },
+  { symbol: 'TRXUSDT',  name: 'Tron',           ticker: 'TRX' },
+  { symbol: 'XLMUSDT',  name: 'Stellar',        ticker: 'XLM' },
+  { symbol: 'HBARUSDT', name: 'Hedera',         ticker: 'HBAR' },
+  { symbol: 'XVGUSDT',  name: 'Verge',          ticker: 'XVG' },
+  { symbol: 'IOTAUSDT', name: 'IOTA',           ticker: 'IOTA' },
+  { symbol: 'SXTUSDT',  name: 'Space & Time',   ticker: 'SXT' },
+];
+
 export default function Home() {
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [inputValue, setInputValue] = useState('BTCUSDT');
@@ -206,6 +219,34 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {/* Watchlist Bar */}
+      <div className="border-b border-zinc-800/50 bg-zinc-950/60">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center gap-2 py-2.5 overflow-x-auto scrollbar-none">
+            <span className="text-[10px] uppercase tracking-wider text-zinc-600 font-medium shrink-0 mr-1">
+              Watchlist
+            </span>
+            {WATCHLIST.map((coin) => {
+              const isActive = symbol === coin.symbol;
+              return (
+                <button
+                  key={coin.symbol}
+                  onClick={() => handleCoinClick(coin.symbol)}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1.5 border ${
+                    isActive
+                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                      : 'bg-zinc-900/60 border-zinc-800/50 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/60'
+                  }`}
+                >
+                  <span className="font-bold">{coin.ticker}</span>
+                  <span className="hidden sm:inline text-zinc-600">{coin.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
