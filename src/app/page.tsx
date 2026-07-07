@@ -25,6 +25,8 @@ import IndicatorPanel from '@/components/indicator-panel';
 import SignalHistory from '@/components/signal-history';
 import { addHistoryEntry, addScoreSnapshot } from '@/lib/signal-history';
 import { fetchKlines, fetchFundingRate } from '@/lib/binance-client';
+import { generateSignals } from '@/lib/signals';
+import type { Candle } from '@/lib/indicators';
 import type { FullAnalysis } from '@/lib/signals';
 
 // Dynamic import for chart (no SSR)
@@ -52,35 +54,43 @@ interface MarketData {
 }
 
 const SEARCH_COINS = [
-  { symbol: 'BTCUSDT',  name: 'Bitcoin' },
-  { symbol: 'ETHUSDT',  name: 'Ethereum' },
-  { symbol: 'SOLUSDT',  name: 'Solana' },
-  { symbol: 'XRPUSDT',  name: 'XRP' },
-  { symbol: 'ADAUSDT',  name: 'Cardano' },
-  { symbol: 'TRXUSDT',  name: 'Tron' },
-  { symbol: 'XLMUSDT',  name: 'Stellar Lumens' },
-  { symbol: 'HBARUSDT', name: 'Hedera Hashgraph' },
-  { symbol: 'XVGUSDT',  name: 'Verge' },
-  { symbol: 'IOTAUSDT',  name: 'IOTA' },
-  { symbol: 'SXTUSDT',  name: 'Space & Time' },
-  { symbol: 'BNBUSDT',  name: 'BNB' },
-  { symbol: 'DOGEUSDT', name: 'Dogecoin' },
-  { symbol: 'AVAXUSDT', name: 'Avalanche' },
-  { symbol: 'SLXUSDT',  name: 'SLX' },
+  { symbol: 'BTCUSDT',   name: 'Bitcoin' },
+  { symbol: 'ETHUSDT',   name: 'Ethereum' },
+  { symbol: 'SOLUSDT',   name: 'Solana' },
+  { symbol: 'BNBUSDT',   name: 'BNB' },
+  { symbol: 'XRPUSDT',   name: 'XRP' },
+  { symbol: 'DOGEUSDT',  name: 'Dogecoin' },
+  { symbol: 'ADAUSDT',   name: 'Cardano' },
+  { symbol: 'AVAXUSDT',  name: 'Avalanche' },
+  { symbol: 'LINKUSDT',  name: 'Chainlink' },
+  { symbol: 'DOTUSDT',   name: 'Polkadot' },
+  { symbol: 'NEARUSDT',  name: 'NEAR Protocol' },
+  { symbol: 'SUIUSDT',   name: 'Sui' },
+  { symbol: 'PEPEUSDT',  name: 'Pepe' },
+  { symbol: 'SHIBUSDT',  name: 'Shiba Inu' },
+  { symbol: 'LTCUSDT',   name: 'Litecoin' },
+  { symbol: 'TRXUSDT',   name: 'Tron' },
+  { symbol: 'XLMUSDT',   name: 'Stellar' },
+  { symbol: 'ATOMUSDT',  name: 'Cosmos' },
+  { symbol: 'APTUSDT',   name: 'Aptos' },
+  { symbol: 'OPUSDT',    name: 'Optimism' },
+  { symbol: 'ARBUSDT',   name: 'Arbitrum' },
+  { symbol: 'WIFUSDT',   name: 'dogwifhat' },
 ];
 
 const WATCHLIST = [
-  { symbol: 'ETHUSDT',  name: 'Ethereum',       ticker: 'ETH' },
-  { symbol: 'SOLUSDT',  name: 'Solana',         ticker: 'SOL' },
-  { symbol: 'XRPUSDT',  name: 'XRP',            ticker: 'XRP' },
-  { symbol: 'ADAUSDT',  name: 'Cardano',        ticker: 'ADA' },
-  { symbol: 'TRXUSDT',  name: 'Tron',           ticker: 'TRX' },
-  { symbol: 'XLMUSDT',  name: 'Stellar',        ticker: 'XLM' },
-  { symbol: 'HBARUSDT', name: 'Hedera',         ticker: 'HBAR' },
-  { symbol: 'XVGUSDT',  name: 'Verge',          ticker: 'XVG' },
-  { symbol: 'IOTAUSDT', name: 'IOTA',           ticker: 'IOTA' },
-  { symbol: 'SXTUSDT',  name: 'Space & Time',   ticker: 'SXT' },
-  { symbol: 'SLXUSDT',  name: 'SLX',             ticker: 'SLX' },
+  { symbol: 'ETHUSDT',  name: 'Ethereum',   ticker: 'ETH' },
+  { symbol: 'SOLUSDT',  name: 'Solana',     ticker: 'SOL' },
+  { symbol: 'BNBUSDT',  name: 'BNB',        ticker: 'BNB' },
+  { symbol: 'XRPUSDT',  name: 'XRP',        ticker: 'XRP' },
+  { symbol: 'DOGEUSDT', name: 'Dogecoin',   ticker: 'DOGE' },
+  { symbol: 'ADAUSDT',  name: 'Cardano',    ticker: 'ADA' },
+  { symbol: 'AVAXUSDT', name: 'Avalanche',  ticker: 'AVAX' },
+  { symbol: 'LINKUSDT', name: 'Chainlink',  ticker: 'LINK' },
+  { symbol: 'DOTUSDT',  name: 'Polkadot',   ticker: 'DOT' },
+  { symbol: 'SUIUSDT',  name: 'Sui',        ticker: 'SUI' },
+  { symbol: 'PEPEUSDT', name: 'Pepe',       ticker: 'PEPE' },
+  { symbol: 'NEARUSDT', name: 'NEAR',       ticker: 'NEAR' },
 ];
 
 const INTERVALS = [
@@ -132,79 +142,106 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      // Step 1: Fetch raw kline data directly from Binance (client-side)
+      // Step 1: Fetch raw kline data directly from Binance (client-side, CORS supported)
       const klines = await fetchKlines(sym, intv, 200);
 
-      // Step 2: Fetch funding rate in parallel (optional)
+      // Step 2: Fetch funding rate in parallel (optional, client-side)
       const fundingRatePromise = fetchFundingRate(sym);
 
-      // Step 3: Send raw data to our API for signal generation
-      const fundingRate = await fundingRatePromise;
-      const res = await fetch('/api/market', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ klines, symbol: sym, interval: intv, fundingRate }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error || 'Failed to generate signals');
+      // Step 3: Parse klines into Candle format
+      const candles: Candle[] = klines.map((k) => ({
+        time: Math.floor(k[0] / 1000),
+        open: parseFloat(k[1]),
+        high: parseFloat(k[2]),
+        low: parseFloat(k[3]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[5]),
+      }));
+
+      // Step 4: Generate signals entirely in the browser (pure math, no server needed)
+      const analysis = generateSignals(candles);
+
+      if (!analysis) {
+        setError('Not enough data to generate signals. Need at least 50 candles.');
         setData(null);
-      } else {
-        setData(json);
+        return;
+      }
 
-        // Log to signal history
-        if (json.analysis?.signal) {
-          const sig = json.analysis.signal;
-          addHistoryEntry({
-            symbol: sym,
-            interval: intv,
-            signalType: sig.type,
-            score: sig.score,
-            confidence: sig.confidence,
-            upProbability: sig.upProbability,
-            entryPrice: sig.entryPrice,
-            stopLoss: sig.stopLoss,
-            takeProfit: sig.takeProfit,
-          });
+      // Step 5: Get funding rate
+      const fundingRate = await fundingRatePromise;
 
-          // Log score for sparkline
-          addScoreSnapshot({ symbol: sym, interval: intv, score: sig.score });
+      // Build the market data object entirely client-side
+      const chartCandles = candles.map((c) => ({
+        time: c.time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        volume: c.volume,
+      }));
 
-          // Check for signal flip and notify
-          const prevType = prevSignalRef.current;
-          if (prevType && prevType !== sig.type) {
-            const prevBull = BULLISH_SIGNALS.includes(prevType);
-            const currBull = BULLISH_SIGNALS.includes(sig.type);
-            const prevBear = BEARISH_SIGNALS.includes(prevType);
-            const currBear = BEARISH_SIGNALS.includes(sig.type);
+      const marketData: MarketData = {
+        symbol: sym,
+        interval: intv,
+        candles: chartCandles,
+        analysis,
+        fundingRate,
+        fetchedAt: new Date().toISOString(),
+      };
+      setData(marketData);
 
-            // Significant flip: bullish→bearish or bearish→bullish or any→strong
-            const isSignificantFlip =
-              (prevBull && currBear) ||
-              (prevBear && currBull) ||
-              sig.type === 'STRONG_BUY' ||
-              sig.type === 'STRONG_SELL';
+      // Log to signal history
+      if (analysis.signal) {
+        const sig = analysis.signal;
+        addHistoryEntry({
+          symbol: sym,
+          interval: intv,
+          signalType: sig.type,
+          score: sig.score,
+          confidence: sig.confidence,
+          upProbability: sig.upProbability,
+          entryPrice: sig.entryPrice,
+          stopLoss: sig.stopLoss,
+          takeProfit: sig.takeProfit,
+        });
 
-            if (isSignificantFlip && notificationsEnabled && 'Notification' in window) {
-              const coinName = sym.replace('USDT', '');
-              const notification = new Notification(`GuruSignals — ${coinName}`, {
-                body: `Signal flipped to ${sig.type.replace('_', ' ')} (${sig.score >= 0 ? '+' : ''}${sig.score}) | Up: ${sig.upProbability}%`,
-                icon: '/icon-192.png',
-                tag: `gurusignal-${sym}-${intv}`,
-              });
-              notification.onclick = () => {
-                window.focus();
-                notification.close();
-              };
-            }
+        // Log score for sparkline
+        addScoreSnapshot({ symbol: sym, interval: intv, score: sig.score });
+
+        // Check for signal flip and notify
+        const prevType = prevSignalRef.current;
+        if (prevType && prevType !== sig.type) {
+          const prevBull = BULLISH_SIGNALS.includes(prevType);
+          const currBull = BULLISH_SIGNALS.includes(sig.type);
+          const prevBear = BEARISH_SIGNALS.includes(prevType);
+          const currBear = BEARISH_SIGNALS.includes(sig.type);
+
+          // Significant flip: bullish→bearish or bearish→bullish or any→strong
+          const isSignificantFlip =
+            (prevBull && currBear) ||
+            (prevBear && currBull) ||
+            sig.type === 'STRONG_BUY' ||
+            sig.type === 'STRONG_SELL';
+
+          if (isSignificantFlip && notificationsEnabled && 'Notification' in window) {
+            const coinName = sym.replace('USDT', '');
+            const notification = new Notification(`GuruSignals — ${coinName}`, {
+              body: `Signal flipped to ${sig.type.replace('_', ' ')} (${sig.score >= 0 ? '+' : ''}${sig.score}) | Up: ${sig.upProbability}%`,
+              icon: '/icon-192.png',
+              tag: `gurusignal-${sym}-${intv}`,
+            });
+            notification.onclick = () => {
+              window.focus();
+              notification.close();
+            };
           }
-          prevSignalRef.current = sig.type;
-          setHistoryRefreshKey((k) => k + 1);
         }
+        prevSignalRef.current = sig.type;
+        setHistoryRefreshKey((k) => k + 1);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      setError(`Network error: ${msg}`);
+      setError(`Failed to fetch market data: ${msg}`);
       setData(null);
     } finally {
       setLoading(false);

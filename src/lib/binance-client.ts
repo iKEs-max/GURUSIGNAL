@@ -56,11 +56,30 @@ async function tryEndpoints<T>(
       const url = `${base}${path}`;
       const res = await fetchWithTimeout(url, timeoutMs);
       if (res.ok) {
-        return await parser(res);
+        const data = await parser(res);
+        // Binance returns errors as { code: -1121, msg: "Invalid symbol." } with HTTP 200
+        if (data && typeof data === 'object' && 'code' in (data as Record<string, unknown>) && 'msg' in (data as Record<string, unknown>)) {
+          const errObj = data as { code: number; msg: string };
+          throw new Error(errObj.msg || `Binance error code ${errObj.code}`);
+        }
+        return data;
+      }
+      // Try to parse error body for a helpful message
+      try {
+        const errBody = await res.json() as { code?: number; msg?: string };
+        if (errBody.msg) {
+          throw new Error(errBody.msg);
+        }
+      } catch {
+        // If parsing fails, use HTTP status
       }
       errors.push(`${base}: HTTP ${res.status}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      // If it's a Binance business error (like Invalid symbol), throw immediately
+      if (msg.includes('Invalid symbol') || msg.includes('Invalid interval') || msg.includes('Too many requests')) {
+        throw new Error(msg);
+      }
       errors.push(`${base}: ${msg}`);
     }
   }
