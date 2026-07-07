@@ -16,6 +16,8 @@ import {
   ChevronUp,
   Bell,
   BellOff,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import SignalCard from '@/components/signal-card';
@@ -100,9 +102,27 @@ export default function Home() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showChartLegend, setShowChartLegend] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [isDark, setIsDark] = useState(true);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const prevSignalRef = useRef<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Close search dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Theme toggle
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark);
+  }, [isDark]);
 
   // Get countdown for current interval
   const currentIntervalConfig = INTERVALS.find((i) => i.value === interval) || INTERVALS[1];
@@ -241,9 +261,9 @@ export default function Home() {
   const isPositive = priceChange !== null && priceChange !== undefined && priceChange >= 0;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-100">
+    <div className="min-h-screen bg-[#050505] text-zinc-100 gs-theme-bg gs-theme-text">
       {/* Header */}
-      <header className="border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
+      <header className="border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50 gs-theme-header gs-theme-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
@@ -259,7 +279,7 @@ export default function Home() {
           </div>
 
           {/* Search */}
-          <div className="relative flex-1 max-w-md">
+          <div ref={searchContainerRef} className="relative flex-1 max-w-md">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <Input
@@ -356,12 +376,19 @@ export default function Home() {
             >
               {notificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
             </button>
+            <button
+              onClick={() => setIsDark(!isDark)}
+              className="h-8 w-8 flex items-center justify-center rounded-md text-zinc-500 hover:text-amber-400 hover:bg-zinc-800 transition-colors"
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
           </div>
         </div>
       </header>
 
       {/* Watchlist Bar */}
-      <div className="border-b border-zinc-800/50 bg-zinc-950/60">
+      <div className="border-b border-zinc-800/50 bg-zinc-950/60 gs-theme-watchlist gs-theme-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center gap-2 py-2.5 overflow-x-auto scrollbar-none">
             <span className="text-[10px] uppercase tracking-wider text-zinc-600 font-medium shrink-0 mr-1">

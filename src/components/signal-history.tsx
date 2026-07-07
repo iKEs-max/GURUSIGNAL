@@ -103,7 +103,7 @@ export default function SignalHistory({ refreshKey }: SignalHistoryProps) {
   const accuracy = getHistoryAccuracy();
 
   return (
-    <Card className="bg-zinc-900/80 border border-zinc-800/50">
+    <Card className="bg-zinc-900/80 border border-zinc-800/50 gs-theme-card">
       <CardContent className="p-5">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">

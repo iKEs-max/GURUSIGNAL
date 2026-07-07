@@ -129,3 +129,66 @@
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* ── GuruSignals Theme Variables ─────────────────── */
+:root {
+  --gs-bg-primary: #050505;
+  --gs-bg-header: rgba(9, 9, 11, 0.8);
+  --gs-bg-watchlist: rgba(9, 9, 11, 0.6);
+  --gs-bg-card: rgba(24, 24, 27, 0.8);
+  --gs-bg-input: #18181b;
+  --gs-text-primary: #f4f4f5;
+  --gs-text-secondary: #a1a1aa;
+  --gs-text-muted: #71717a;
+  --gs-text-faint: #52525b;
+  --gs-border: rgba(63, 63, 70, 0.5);
+  --gs-chart-bg: #18181b;
+}
+
+/* Light theme overrides */
+html:not(.dark) {
+  --gs-bg-primary: #f9fafb;
+  --gs-bg-header: rgba(255, 255, 255, 0.85);
+  --gs-bg-watchlist: rgba(249, 250, 251, 0.8);
+  --gs-bg-card: rgba(255, 255, 255, 0.9);
+  --gs-bg-input: #f3f4f6;
+  --gs-text-primary: #111827;
+  --gs-text-secondary: #4b5563;
+  --gs-text-muted: #6b7280;
+  --gs-text-faint: #9ca3af;
+  --gs-border: rgba(209, 213, 219, 0.7);
+  --gs-chart-bg: #ffffff;
+}
+
+/* Apply theme variables to hardcoded classes */
+html:not(.dark) .gs-theme-bg {
+  background-color: var(--gs-bg-primary) !important;
+}
+html:not(.dark) .gs-theme-header {
+  background-color: var(--gs-bg-header) !important;
+  backdrop-filter: blur(12px);
+}
+html:not(.dark) .gs-theme-watchlist {
+  background-color: var(--gs-bg-watchlist) !important;
+}
+html:not(.dark) .gs-theme-card {
+  background-color: var(--gs-bg-card) !important;
+  border-color: var(--gs-border) !important;
+}
+html:not(.dark) .gs-theme-input {
+  background-color: var(--gs-bg-input) !important;
+  border-color: var(--gs-border) !important;
+  color: var(--gs-text-primary) !important;
+}
+html:not(.dark) .gs-theme-text {
+  color: var(--gs-text-primary) !important;
+}
+html:not(.dark) .gs-theme-text-secondary {
+  color: var(--gs-text-secondary) !important;
+}
+html:not(.dark) .gs-theme-text-muted {
+  color: var(--gs-text-muted) !important;
+}
+html:not(.dark) .gs-theme-border {
+  border-color: var(--gs-border) !important;
+}

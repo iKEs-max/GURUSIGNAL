@@ -68,7 +68,7 @@ export default function SignalCard({ signal, symbol, interval }: SignalCardProps
   return (
     <div className="space-y-4">
       {/* Main Signal */}
-      <Card className={`${config.bg} ${config.border} border`}>
+      <Card className={`${config.bg} ${config.border} border gs-theme-card`}>
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -148,7 +148,7 @@ export default function SignalCard({ signal, symbol, interval }: SignalCardProps
       {/* Price Levels */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* Entry */}
-        <Card className="bg-zinc-900/80 border border-zinc-800/50">
+        <Card className="bg-zinc-900/80 border border-zinc-800/50 gs-theme-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
               <Target className="w-4 h-4 text-zinc-400" />
@@ -161,7 +161,7 @@ export default function SignalCard({ signal, symbol, interval }: SignalCardProps
         </Card>
 
         {/* Stop Loss */}
-        <Card className="bg-zinc-900/80 border border-red-500/20">
+        <Card className="bg-zinc-900/80 border border-red-500/20 gs-theme-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
               <Shield className="w-4 h-4 text-red-400" />
@@ -177,7 +177,7 @@ export default function SignalCard({ signal, symbol, interval }: SignalCardProps
         </Card>
 
         {/* Take Profit */}
-        <Card className="bg-zinc-900/80 border border-emerald-500/20">
+        <Card className="bg-zinc-900/80 border border-emerald-500/20 gs-theme-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
               <Target className="w-4 h-4 text-emerald-400" />
@@ -195,7 +195,7 @@ export default function SignalCard({ signal, symbol, interval }: SignalCardProps
 
       {/* Reasoning */}
       {signal.reasoning.length > 0 && (
-        <Card className="bg-zinc-900/80 border border-zinc-800/50">
+        <Card className="bg-zinc-900/80 border border-zinc-800/50 gs-theme-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
