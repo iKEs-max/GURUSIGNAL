@@ -43,7 +43,22 @@ interface MarketData {
   fetchedAt: string;
 }
 
-const POPULAR_COINS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT'];
+const SEARCH_COINS = [
+  { symbol: 'BTCUSDT',  name: 'Bitcoin' },
+  { symbol: 'ETHUSDT',  name: 'Ethereum' },
+  { symbol: 'SOLUSDT',  name: 'Solana' },
+  { symbol: 'XRPUSDT',  name: 'XRP' },
+  { symbol: 'ADAUSDT',  name: 'Cardano' },
+  { symbol: 'TRXUSDT',  name: 'Tron' },
+  { symbol: 'XLMUSDT',  name: 'Stellar Lumens' },
+  { symbol: 'HBARUSDT', name: 'Hedera Hashgraph' },
+  { symbol: 'XVGUSDT',  name: 'Verge' },
+  { symbol: 'IOTAUSDT', name: 'IOTA' },
+  { symbol: 'SXTUSDT',  name: 'Space & Time' },
+  { symbol: 'BNBUSDT',  name: 'BNB' },
+  { symbol: 'DOGEUSDT', name: 'Dogecoin' },
+  { symbol: 'AVAXUSDT', name: 'Avalanche' },
+];
 
 const WATCHLIST = [
   { symbol: 'ETHUSDT',  name: 'Ethereum',       ticker: 'ETH' },
@@ -184,19 +199,31 @@ export default function Home() {
 
             {/* Suggestions */}
             {showSuggestions && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl z-50 overflow-hidden">
-                {POPULAR_COINS.filter((c) =>
-                  c.includes(inputValue.toUpperCase())
-                ).map((coin) => (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl z-50 overflow-hidden max-h-72 overflow-y-auto scrollbar-none">
+                {SEARCH_COINS.filter((c) => {
+                  if (!inputValue) return true;
+                  const q = inputValue.toUpperCase();
+                  return c.symbol.includes(q) || c.name.toUpperCase().includes(q);
+                }).map((coin) => (
                   <button
-                    key={coin}
-                    onClick={() => handleCoinClick(coin)}
-                    className="w-full px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2"
+                    key={coin.symbol}
+                    onClick={() => handleCoinClick(coin.symbol)}
+                    className="w-full px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center justify-between"
                   >
-                    <Activity className="w-3 h-3 text-zinc-600" />
-                    {coin}
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-3.5 h-3.5 text-amber-500/60" />
+                      <span className="font-medium text-zinc-100">{coin.symbol.replace('USDT','')}</span>
+                      <span className="text-zinc-600">/USDT</span>
+                    </div>
+                    <span className="text-xs text-zinc-600">{coin.name}</span>
                   </button>
                 ))}
+                {inputValue && SEARCH_COINS.filter((c) => {
+                  const q = inputValue.toUpperCase();
+                  return c.symbol.includes(q) || c.name.toUpperCase().includes(q);
+                }).length === 0 && (
+                  <div className="px-3 py-2 text-xs text-zinc-600">No matches — press Enter to search anyway</div>
+                )}
               </div>
             )}
           </div>
