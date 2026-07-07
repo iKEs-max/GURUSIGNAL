@@ -19,6 +19,38 @@ interface BinanceKline {
 
 const VALID_INTERVALS = ['1m', '5m', '15m'];
 
+const FETCH_HEADERS: Record<string, string> = {
+  'Accept': 'application/json',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+};
+
+async function fetchWithRetry(url: string, timeoutMs: number, retries = 2): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, {
+          cache: 'no-store',
+          signal: controller.signal,
+          headers: FETCH_HEADERS,
+        });
+        return res;
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (err) {
+      lastError = err as Error;
+      if (attempt < retries) {
+        // Wait 500ms before retry
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+  }
+  throw lastError || new Error('Fetch failed after retries');
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = (searchParams.get('symbol') || 'BTCUSDT').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -35,13 +67,7 @@ export async function GET(request: NextRequest) {
   try {
     // Fetch kline data from Binance FUTURES API (fapi) for perpetual futures
     const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-    const response = await fetch(url, {
-      cache: 'no-store',
-      signal: AbortSignal.timeout(15000),
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
+    const response = await fetchWithRetry(url, 15000);
 
     if (!response.ok) {
       const errorBody = await response.text();
@@ -51,14 +77,14 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         );
       }
-      throw new Error(`Binance Futures API error: ${response.status} ${errorBody}`);
+      throw new Error(`Binance API returned ${response.status}: ${errorBody}`);
     }
 
     const klines: BinanceKline[] = await response.json();
 
     if (!klines || klines.length === 0) {
       return NextResponse.json(
-        { error: `No data found for symbol "${symbol}". Try "BTCUSDT" or "ETHUSDT".` },
+        { error: `No data found for "${symbol}". Try "BTCUSDT" or "ETHUSDT".` },
         { status: 404 }
       );
     }
@@ -83,14 +109,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch funding rate in parallel
+    // Fetch funding rate (optional, non-blocking)
     let fundingRate: number | null = null;
     try {
       const fundingUrl = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`;
-      const fundingRes = await fetch(fundingUrl, {
-        cache: 'no-store',
-        signal: AbortSignal.timeout(8000),
-      });
+      const fundingRes = await fetchWithRetry(fundingUrl, 8000, 0);
       if (fundingRes.ok) {
         const fundingData = await fundingRes.json();
         if (Array.isArray(fundingData) && fundingData.length > 0) {
@@ -121,9 +144,10 @@ export async function GET(request: NextRequest) {
       candleCount: candles.length,
     });
   } catch (error) {
-    console.error('Market API error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Market API error:', message);
     return NextResponse.json(
-      { error: 'Failed to fetch market data. Please try again.' },
+      { error: `Failed to fetch market data: ${message}` },
       { status: 500 }
     );
   }
